@@ -440,7 +440,7 @@ Denuvo GmbH0
 Denuvo GmbH0?
 `
 
-These are certificate/signature strings -- likely from an embedded Denuvo certificate used to identify or validate against Denuvo's token system.
+These are ASN.1 certificate issuer/subject strings that are part of the **fake Denuvo license data** embedded in the binary. KIRIGIRI.dll writes this data to `KIRIGIRI.bin` and hooks `CreateFileW` to redirect Denuvo's license file reads to this fake file (see Appendix B.5).
 
 **Unicode Wide Strings:**
 `
@@ -454,7 +454,7 @@ VmFuncInitVmm -- Initialize Virtual Machine Monitor
 VmFuncUninitVmm -- Uninitialize Virtual Machine Monitor
 `
 
-These are the top-level entry/exit functions for the hypervisor lifecycle.
+These are the top-level entry/exit functions for the hypervisor lifecycle. In SimpleSvm.sys (AMD), these are **internal functions** compiled directly into the driver. This contrasts with hyperkd.sys (Intel), where these same function names are **imported from `hyperhv.dll`**.
 
 ### 6.3 How SimpleSvm Intercepts Denuvo's CPUID Checks
 
@@ -479,7 +479,7 @@ The AMD SVM hypervisor works by:
 270226071959Z0 -- 2027-02-26 07:19:59 UTC
 `
 
-These are X.509 certificate validity dates embedded in the binary. The certificate was created on 2026-02-26 (2 days before the driver's file timestamp of 2026-02-28), valid for 1 year. This is a **self-signed test certificate** used for test-signing the driver.
+These are ASN.1 validity dates embedded in the binary. They are part of the **fake Denuvo license data** (counterfeit certificate) that the crack presents to Denuvo's verification routines. The dates define the validity window of the counterfeit license token. (Note: the earlier version of this report incorrectly identified these as a "self-signed test certificate" for driver signing -- Ghidra decompilation of KIRIGIRI.dll in Appendix B.5 revealed these are part of the fake license blob written to `KIRIGIRI.bin`.)
 
 
 ---
@@ -570,21 +570,21 @@ ZwClose -- closes handle
 NtQuerySystemInformation -- queries system information tables
 `
 
-**Custom Function Names (NOT kernel APIs -- internal to hyperkd.sys):**
+**Imported and Internal Function Names:**
 `
-VmFuncInitVmm -- Initialize the Virtual Machine Monitor
-VmFuncUninitVmm -- Uninitialize the Virtual Machine Monitor
-CounterThreadHandle -- Handle to the counter update thread
-CounterUpdater -- The counter updating function itself
-StopCounterThread -- Stops the counter thread
-NotifyRoutineActive -- Flag for process notification callback
-ProcessExitCleanup -- Cleanup on game process exit
+VmFuncInitVmm -- Initialize the Virtual Machine Monitor (imported from hyperhv.dll)
+VmFuncUninitVmm -- Uninitialize the Virtual Machine Monitor (imported from hyperhv.dll)
+CounterThreadHandle -- Handle to the counter update thread (internal)
+CounterUpdater -- The counter updating function itself (internal)
+StopCounterThread -- Stops the counter thread (internal)
+NotifyRoutineActive -- Flag for process notification callback (internal)
+ProcessExitCleanup -- Cleanup on game process exit (internal)
 `
 
 **What these tell us:**
 
-- `VmFuncInitVmm` / `VmFuncUninitVmm` -- hyperkd.sys **directly controls SimpleSvm.sys's hypervisor lifecycle**. It calls into SimpleSvm to start/stop the hypervisor.
-- `CounterUpdater` / `CounterThreadHandle` / `StopCounterThread` -- A dedicated kernel thread that **continuously updates spoofed counter values** (likely `KUSER_SHARED_DATA.TickCount`, `QueryPerformanceCounter` values, and `RDTSC` baselines). This defeats Denuvo's timing-based anti-debug checks.
+- `VmFuncInitVmm` / `VmFuncUninitVmm` -- These are **imported from `hyperhv.dll`** (a modified build of the open-source HyperDbg project). hyperkd.sys calls into hyperhv.dll to start/stop the Intel VMX hypervisor. (Note: hyperkd.sys does NOT interact with SimpleSvm.sys -- they are mutually exclusive drivers for different CPU vendors.)
+- `CounterUpdater` / `CounterThreadHandle` / `StopCounterThread` -- A dedicated kernel thread created by hyperkd.sys that **continuously updates spoofed counter values** (likely `KUSER_SHARED_DATA.TickCount`, `QueryPerformanceCounter` values, and `RDTSC` baselines). This defeats Denuvo's timing-based anti-debug checks.
 - `NotifyRoutineActive` -- Uses `PsSetCreateProcessNotifyRoutine` to monitor process creation. When `re9.exe` starts, it activates the spoofing. When it exits, it cleans up.
 - `ProcessExitCleanup` -- Ensures the hypervisor is properly unloaded and KUSER data is restored when the game closes
 
@@ -622,7 +622,7 @@ FUNC_WCSCMP, FUNC_WCSLEN, FUNC_WCSNCMP, FUNC_XOR
 
 **This is extremely significant.** These strings come from **HyperDbg** -- an open-source hypervisor debugger project ([github.com/HyperDbg/HyperDbg](https://github.com/HyperDbg/HyperDbg)). HyperDbg is a kernel debugger that uses AMD SVM/Intel VMX to debug at the hypervisor level. The `FUNC_*` strings are the **scripting engine opcodes** used by HyperDbg's built-in scripting language.
 
-This reveals that `hyperkd.sys` is likely **based on or incorporates code from HyperDbg**, not just SimpleSvm. HyperDbg provides:
+This confirms that `hyperkd.sys` **links against `hyperhv.dll`**, which is a modified build of HyperDbg. The `FUNC_*` strings appear in `hyperkd.sys` during string extraction because the linker embeds import library metadata from `hyperhv.dll`. The actual HyperDbg engine code resides in `hyperhv.dll`, not in `hyperkd.sys` itself (Ghidra decompilation in Appendix B confirmed `hyperkd.sys` is a thin 26-function shim). HyperDbg provides:
 - A complete **hypervisor-level debugger** invisible to the guest OS
 - **Event injection/interception** (`FUNC_EVENT_INJECT`, `FUNC_EVENT_TRACE_STEP`)
 - **Physical/virtual memory read/write** (`FUNC_DB_PA`, `FUNC_EB_PA`, `FUNC_PHYSICAL_TO_VIRTUAL`)
@@ -638,7 +638,7 @@ Denuvo GmbH0
 Denuvo GmbH0?
 `
 
-Same Denuvo certificate strings as in SimpleSvm.sys -- these are embedded from the game's Denuvo token/certificate data, used to identify and interact with Denuvo's protection.
+These are ASN.1 certificate issuer/subject strings. They are part of the **fake Denuvo license data** that KIRIGIRI.dll writes to `KIRIGIRI.bin` (see Appendix B.5). The `CreateFileW` IAT hook redirects Denuvo's license file reads to this fake file. The strings appear in both `.sys` drivers because the fake license blob is embedded in the driver binaries.
 
 **Certificate Dates:**
 `
@@ -646,7 +646,7 @@ Same Denuvo certificate strings as in SimpleSvm.sys -- these are embedded from t
 270226071959Z0 -- 2027-02-26 07:19:59 UTC
 `
 
-Self-signed certificate valid from Feb 26, 2026 to Feb 26, 2027.
+These are ASN.1 validity dates embedded in the fake Denuvo license data. They define the validity window of the counterfeit license token that the crack presents to Denuvo's verification routines.
 
 **PE Sections:**
 `
@@ -670,38 +670,37 @@ Same power callback as SimpleSvm -- confirms hyperkd.sys manages power state tra
 hyperhv.dll
 `
 
-This string references a DLL named `hyperhv.dll` -- this is **not present in the package**. It may be:
-- A user-mode companion DLL loaded by the game loader to communicate with hyperkd.sys via IOCTL
-- A dependency that is loaded at runtime from the game's directory
-- Part of the steamclient_loader_x64.exe (not included in the workspace)
+This string references `hyperhv.dll` -- a modified build of the open-source **HyperDbg** project. This DLL is **not present in this workspace** but would be present in the game's installation directory. Ghidra decompilation (Appendix B.2) confirmed that `hyperkd.sys` **imports** `VmFuncInitVmm` and `VmFuncUninitVmm` from this DLL. `hyperhv.dll` contains the actual Intel VMX hypervisor engine (762 functions, 27,449 lines of decompiled pseudocode -- see Appendix B.6), while `hyperkd.sys` is merely a thin shim that calls into it.
 
-### 7.3 How hyperkd.sys Works -- Reconstructed from Strings
+### 7.3 How hyperkd.sys Works -- Confirmed by Ghidra Decompilation
 
-Based on the extracted strings, API imports, and NFO credits, here is the reconstructed operation flow:
+Ghidra decompilation (Appendix B.2) confirmed the following operation flow. Note that `hyperkd.sys` is used **only on Intel systems** -- on AMD systems, `SimpleSvm.sys` handles all equivalent functions independently.
 
-1. **Game loader calls `CreateService()`** to register `hyperkd.sys` as a kernel service
-2. **`hyperkd.sys` loads and:**
-   - Detects CPU type (AMD -- SVM path)
-   - Calls `VmFuncInitVmm` to initialize the hypervisor (loads SimpleSvm.sys or its own embedded hypervisor)
-   - Registers `PsSetCreateProcessNotifyRoutine` callback to watch for `re9.exe` process creation
+1. **KIRIGIRI.dll calls `CreateServiceW()`** to register `hyperkd.sys` as a kernel service named `"denuvo_kirigiri"`, then calls `StartServiceW()` to load it
+2. **`hyperkd.sys` DriverEntry runs and:**
+   - Registers a `\Callback\PowerState` callback via `ExCreateCallback` / `ExRegisterCallback` for sleep/hibernate handling
+   - Checks for an existing hypervisor via `NtQuerySystemInformation(0xC4)` -- aborts if one is already running (e.g., Hyper-V)
+   - Calls `VmFuncInitVmm()` (imported from `hyperhv.dll`) with a zeroed 0xA0-byte configuration structure -- this single call starts the Intel VMX hypervisor on all CPU cores via `VMXON` / `VMLAUNCH`
+   - Creates the `CounterUpdater` system thread via `PsCreateSystemThread`
 
-3. **When re9.exe starts:**
-   - `NotifyRoutineActive` flag is set
-   - `PsCreateSystemThread` creates the `CounterUpdater` kernel thread
-   - The `CounterUpdater` continuously updates spoofed values in KUSER_SHARED_DATA
-   - Uses `KeStackAttachProcess` to attach to re9.exe's address space for process-specific modifications
-4. **While the game runs:**
-   - HyperDbg-derived scripting engine runs event-based interception scripts
+3. **While the game runs:**
+   - The `CounterUpdater` thread continuously updates spoofed values in KUSER_SHARED_DATA for the game process
+   - `hyperhv.dll`'s HyperDbg engine handles all CPUID, RDTSC, and MSR interceptions at ring -1
    - CPUID intercepts return spoofed values (no hypervisor detected)
    - RDTSC/RDTSCP intercepts return consistent timing values
    - KUSER_SHARED_DATA is continuously maintained with "normal" values
    - `KdDebuggerNotPresent` is kept set to TRUE
 
-5. **When re9.exe exits:**
-   - `ProcessExitCleanup` fires
-   - `StopCounterThread` terminates the counter updater
-   - `VmFuncUninitVmm` shuts down the hypervisor
+4. **On driver unload (game exit):**
+   - Sets a stop flag to terminate the `CounterUpdater` thread
+   - Waits for the thread to exit via `KeWaitForSingleObject`
+   - Calls `VmFuncUninitVmm()` (imported from `hyperhv.dll`) to shut down the hypervisor on all cores
    - KUSER_SHARED_DATA is restored to real values
+
+5. **On power state change (sleep/hibernate):**
+   - Calls `VmFuncUninitVmm()` to devirtualize before sleep
+   - Calls `VmFuncInitVmm()` to revirtualize after wake
+   - This prevents BSODs caused by hypervisor state being lost across power transitions
 
 
 ---
