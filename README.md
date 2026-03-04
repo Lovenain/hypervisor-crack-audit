@@ -24,6 +24,7 @@
 9. [amd_ags_x64.org -- AMD GPU Services Backup](#9-amd_ags_x64org--amd-gpu-services-backup)
 10. [How All Components Work Together -- Boot-to-Game Flow](#10-how-all-components-work-together--boot-to-game-flow)
 11. [Risk Assessment & Verdict](#11-risk-assessment--verdict)
+12. [Is This Malware and Is It Safe to Use](#12-is-this-malware-and-is-it-safe-to-use)
 
 ---
 
@@ -180,8 +181,11 @@ When Denuvo executes a check inside the game process:
 ## 5. EfiGuard -- UEFI Bootkit (Ring -2)
 
 **Source:** Open-source, GPL-3.0 -- [github.com/Mattiwatti/EfiGuard](https://github.com/Mattiwatti/EfiGuard)
+
 **Author:** Mattiwatti (Matthijs Lavrijsen)
+
 **Stars:** 2,300+ on GitHub
+
 **Purpose:** Disable PatchGuard and Driver Signature Enforcement (DSE) at boot time
 
 ### 5.1 Files in the EfiGuard Folder
@@ -304,10 +308,15 @@ The `EfiGuardDxe.efi` strings also reveal:
 ## 6. SimpleSvm.sys -- AMD Hypervisor (Ring -1)
 
 **Source:** Open-source, MIT License -- [github.com/tandasat/SimpleSvm](https://github.com/tandasat/SimpleSvm)
+
 **Author:** Satoshi Tanda (security researcher)
+
 **Stars:** 534 on GitHub
+
 **Binary Size:** 17,776 bytes
+
 **PE Subsystem:** Native/Kernel (Subsystem = 1)
+
 **Architecture:** x86-64 (Machine = 0x8664)
 
 ### 6.1 What SimpleSvm Is
@@ -468,11 +477,17 @@ These are X.509 certificate validity dates embedded in the binary. The certifica
 ## 7. hyperkd.sys -- Custom MKDEV Kernel Driver (Ring 0)
 
 **Source:** Closed-source, proprietary -- created by MKDEV TEAM
+
 **No public repository.** Not independently verifiable.
+
 **Binary Size:** 11,632 bytes
+
 **PE Subsystem:** Native/Kernel (Subsystem = 1)
+
 **Architecture:** x86-64 (Machine = 0x8664)
+
 **Compiled:** 2026-02-27 (per INF `DriverVer = 02/27/2026,22.24.54.779`)
+
 **File Date:** 2026-02-28 02:56
 
 ### 7.1 The hyperlog.inf Driver Installation Manifest
@@ -684,7 +699,9 @@ Based on the extracted strings, API imports, and NFO credits, here is the recons
 ## 8. ColdClientLoader + Goldberg Steam Emulator (Ring 3)
 
 **ColdClientLoader Source:** Open-source -- originally by Rat431
+
 **Steam Emulator Source:** Open-source, LGPL -- by Mr. Goldberg ([gitlab.com/Mr_Goldberg/goldberg_emulator](https://gitlab.com/Mr_Goldberg/goldberg_emulator))
+
 **Purpose:** Replace the real Steam client so the game thinks it's running under a legitimate Steam installation
 
 ### 8.1 ColdClientLoader.ini -- Configuration
@@ -815,9 +832,13 @@ These tell the emulator which exact version of each Steamworks interface the gam
 ## 9. amd_ags_x64.org -- AMD GPU Services Backup
 
 **Original Name:** `amd_ags_x64.dll`
+
 **Size:** 179,408 bytes
+
 **Architecture:** x86-64
+
 **PE Subsystem:** Windows Console (3) -- this is a DLL despite the subsystem
+
 **Signed:** Yes (AMD certificate)
 
 ### 9.1 What This File Is
@@ -973,4 +994,54 @@ Classification: This is a game piracy crack, specifically a DRM bypass tool. The
 
 *Report generated: March 4, 2026*
 *All analysis performed via passive static methods -- string extraction, PE header reading, config file parsing, and open-source research.*
+
+---
+
+## 12. Is This Malware and Is It Safe to Use
+
+### 12.1 Is This Malware?
+
+Based on all evidence gathered through passive static analysis, this package is not malware in the traditional sense. It does not contain ransomware, spyware, keyloggers, cryptocurrency miners, botnet agents, adware, or any form of data-stealing code. No network communication to external command-and-control servers was found in any configuration file or extracted string. The Goldberg Steam emulator is explicitly configured with `offline=1`, meaning it does not make any outbound internet connections. Every single component in the package has a clear, specific, and narrow purpose that maps directly to bypassing the game's DRM protection stack.
+
+Three of the five major components (EfiGuard, the original SimpleSvm, and the Goldberg Steam Emulator) are well-known open-source projects with publicly auditable source code, active communities, and years of public scrutiny. ColdClientLoader is also open-source and operates entirely in user mode with no elevated privileges beyond launching a process. The only component that cannot be independently verified is `hyperkd.sys`, which is closed-source and authored by the anonymous MKDEV TEAM.
+
+String extraction from `hyperkd.sys` revealed only kernel API imports, hypervisor management functions, KUSER_SHARED_DATA spoofing routines, and HyperDbg scripting engine opcodes. No strings suggesting network sockets, HTTP requests, file encryption, clipboard monitoring, screenshot capture, keystroke logging, or any other data exfiltration mechanism were found.
+
+### 12.2 Is It Safe to Use?
+
+The honest answer is that it depends on what "safe" means to you, and the answer is more nuanced than a simple yes or no.
+
+From a malware perspective, there is no evidence that this package will steal your data, encrypt your files, or enroll your machine in a botnet. In that narrow sense, it appears safe.
+
+However, from a system security perspective, using this package is absolutely not safe for your primary computer. Here is why:
+
+First, `hyperkd.sys` is 11,632 bytes of unsigned, closed-source kernel code running at ring 0 with full access to your system's physical memory. No amount of string analysis can guarantee what every byte of compiled code does. It could contain a dormant backdoor that is not visible through string extraction alone. The only way to fully verify it would be complete reverse engineering with a disassembler, which was outside the scope of this analysis.
+
+Second, EfiGuard completely disables Driver Signature Enforcement and PatchGuard. These are two of Windows' most important kernel-level security features. With them disabled, any malicious software that gains even temporary access to your system can load its own unsigned kernel drivers without any resistance from the operating system. You are effectively removing the locks from your front door.
+
+Third, the security regression is persistent. Even after you close the game and `hyperkd.sys` cleans up the hypervisor, DSE and PatchGuard remain disabled for the entire Windows session until you remove the EfiGuard boot entry and perform a clean reboot. Every minute your system runs in this state is a minute where other threats have an easier path to kernel-level compromise.
+
+Fourth, kernel drivers can cause blue screens of death (BSOD). MKDEV TEAM themselves acknowledge this in their NFO file, stating that kernel drivers can cause blue screens when there are mistakes in the code and that long-term stability has not been tested. A BSOD during a disk write operation could corrupt data.
+
+Fifth, the HyperDbg-derived scripting engine embedded in `hyperkd.sys` includes physical address memory read and write functions (the _PA variants). This capability is functionally identical to what a kernel rootkit would use. While it appears to be used here only for DRM bypass, the capability itself is inherently dangerous.
+
+### 12.3 Recommendations
+
+If you are considering using this package, follow these guidelines to minimize risk:
+
+Never run it on your primary computer, work machine, or any system that contains personal data, banking credentials, or anything you cannot afford to lose.
+
+If you must test it, use a completely isolated environment. A dedicated spare computer with a fresh Windows installation and no personal data is the safest option. A virtual machine is the next best choice, though note that SimpleSvm requires bare-metal AMD SVM access, so nested virtualization support would be needed.
+
+Keep your system disconnected from the internet while the crack is active and DSE/PatchGuard are disabled. This reduces the window during which other threats could exploit the lowered defenses.
+
+After you are done, remove the EfiGuard boot entry, restore Secure Boot, and perform a clean reboot to re-enable all Windows security features.
+
+Do not leave the EfiGuard USB drive plugged in or configured as a default boot option. If your system always boots through EfiGuard, your security features will be permanently disabled.
+
+Understand that using this package constitutes copyright infringement. Regardless of the technical safety question, distributing or using cracked software is illegal in most jurisdictions.
+
+### 12.4 Bottom Line
+
+This is not malware. It is a technically sophisticated DRM bypass tool. But "not malware" does not mean "safe." The package disables critical operating system security features, runs unverifiable code at the highest privilege levels, and leaves your system in a weakened state for the duration of use. Treat it the way you would treat any other tool that requires you to disable your security software to function -- with extreme caution and never on a machine you care about.
 
