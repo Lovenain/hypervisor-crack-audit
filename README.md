@@ -992,11 +992,6 @@ Classification: This is a game piracy crack, specifically a DRM bypass tool. The
 
 ---
 
-*Report generated: March 4, 2026*
-*All analysis performed via passive static methods -- string extraction, PE header reading, config file parsing, and open-source research.*
-
----
-
 ## 12. Is This Malware and Is It Safe to Use
 
 ### 12.1 Is This Malware?
@@ -1044,4 +1039,9 @@ Understand that using this package constitutes copyright infringement. Regardles
 ### 12.4 Bottom Line
 
 This is not malware. It is a technically sophisticated DRM bypass tool. But "not malware" does not mean "safe." The package disables critical operating system security features, runs unverifiable code at the highest privilege levels, and leaves your system in a weakened state for the duration of use. Treat it the way you would treat any other tool that requires you to disable your security software to function -- with extreme caution and never on a machine you care about.
+
+---
+
+*Report generated: March 4, 2026*
+*All analysis performed via passive static methods -- string extraction, PE header reading, config file parsing, and open-source research.*
 
