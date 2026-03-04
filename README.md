@@ -3,11 +3,13 @@
 
 **Audit Date:** March 4, 2026
 
-**Analyst:** Passive static analysis only -- no binaries were executed
+**Analyst:** Independent student research project -- this is NOT an official or professional security audit
 
-**Method:** String extraction, PE header analysis, INF parsing, config file review, GitHub open-source research
+**Method:** Passive static analysis only -- string extraction, PE header analysis, INF parsing, config file review, GitHub open-source research, Ghidra 12.0.4 decompilation. No binaries were executed.
 
 **Source Files Download:** [https://file-me.top/kpypgyn3k47v.html](https://file-me.top/kpypgyn3k47v.html)
+
+**Disclaimer:** This analysis was conducted as a personal learning exercise by a student. It is not a professional security assessment and should not be treated as one. The findings documented here represent a best-effort analysis using freely available tools, but may contain errors, misinterpretations, or omissions. Please wait for analysis from official or more experienced sources before making any security decisions based on this document.
 
 ---
 
@@ -25,6 +27,8 @@
 10. [How All Components Work Together -- Boot-to-Game Flow](#10-how-all-components-work-together--boot-to-game-flow)
 11. [Risk Assessment & Verdict](#11-risk-assessment--verdict)
 12. [Is This Malware and Is It Safe to Use](#12-is-this-malware-and-is-it-safe-to-use)
+- [Appendix A: Tools & Methods](#appendix-a-tools--methods-used-for-this-analysis)
+- [Appendix B: Ghidra Decompilation Analysis](#appendix-b-ghidra-decompilation-analysis)
 
 ---
 
@@ -43,7 +47,7 @@ The crack operates across **four CPU privilege levels** simultaneously:
 | Kernel | Ring 0 | hyperkd.sys | KUSER_SHARED_DATA spoofing, orchestrates hypervisor |
 | User Mode | Ring 3 | ColdClientLoader + Goldberg Emu | Replaces Steam client, emulates Steamworks API |
 
-**Verdict:** Not general-purpose malware. Every component has a specific DRM-bypass function. However, `hyperkd.sys` is **closed-source, unsigned, ring-0** code from an anonymous group -- it carries inherent risk. The package also **disables critical Windows security features** (DSE, PatchGuard), leaving the system vulnerable to other threats while active.
+**What This Analysis Found:** Based on the tools and methods used, no evidence of general-purpose malware was found -- every component appears to have a specific DRM-bypass function. However, the package includes unsigned ring-0 kernel code and disables critical Windows security features (DSE, PatchGuard). This analysis may be incomplete or contain errors -- see the disclaimer above.
 
 ---
 
@@ -479,9 +483,9 @@ These are X.509 certificate validity dates embedded in the binary. The certifica
 
 ## 7. hyperkd.sys -- Custom MKDEV Kernel Driver (Ring 0)
 
-**Source:** Closed-source, proprietary -- created by MKDEV TEAM
+**Source:** Created by MKDEV TEAM
 
-**No public repository.** Not independently verifiable.
+**No public repository.**
 
 **Binary Size:** 11,632 bytes
 
@@ -936,15 +940,16 @@ Step 11: When the user closes the game, ProcessExitCleanup fires in hyperkd.sys.
 
 ### 11.1 Is This Malware?
 
-**No, this is not general-purpose malware** (not ransomware, spyware, keylogger, botnet agent, cryptocurrency miner, etc.).
+Based on what this analysis found, **no evidence of general-purpose malware was detected** (no ransomware, spyware, keylogger, botnet agent, cryptocurrency miner, etc. was found). However, this analysis has limitations and may have missed things -- it should not be taken as a definitive answer.
 
-Evidence supporting this conclusion:
-- Every component has a specific, narrow DRM-bypass function
+Observations that led to this assessment:
+- Every component appears to have a specific, narrow DRM-bypass function
 - Three of five components are open-source with known, audited code (EfiGuard, SimpleSvm, Goldberg)
-- The `configs.main.ini` sets `offline=1` -- no outbound network connections to command-and-control servers
+- The `configs.main.ini` sets `offline=1` -- no outbound network connections to command-and-control servers were found in config files
 - The Goldberg emulator explicitly disables real Steam networking
-- The crack group (MKDEV TEAM) is known in the game cracking scene -- this is their typical release format
+- The crack group (MKDEV TEAM) is known in the game cracking scene -- this appears to be their typical release format
 - The NFO's instructions are consistent with DRM bypass, not malware installation
+- Ghidra decompilation of all six binaries found zero network/injection/exfiltration API calls -- but decompilation is not perfect and could miss obfuscated code
 
 ### 11.2 Real Security Risks
 
@@ -953,7 +958,7 @@ Despite not being malware, **the risks are serious and real:**
 | Risk | Severity | Details |
 |------|----------|---------|
 | **BSOD / System Instability** | HIGH | MKDEV TEAM explicitly warns: *"Kernel drivers are able to cause blue screens when there are mistakes in the code, this has not yet been tested for long term stability."* A bug in `hyperkd.sys` at ring-0 means instant BSOD. |
-| **Unverifiable Code at Ring 0** | HIGH | `hyperkd.sys` is **closed-source, 11,632 bytes of unsigned kernel code** from an anonymous group. You CANNOT verify it doesn't contain a backdoor, rootkit, or data exfiltration logic beyond what string analysis suggests. |
+| **Custom Code at Ring 0** | HIGH | `hyperkd.sys` is **11,632 bytes of unsigned kernel code** from an anonymous group. Ghidra decompilation (see Appendix B) confirmed it is a thin shim that delegates to `hyperhv.dll`, with no malicious API calls found -- but ring-0 code always carries inherent risk. |
 | **Complete DSE + PatchGuard Disable** | CRITICAL | With EfiGuard active, Windows has **zero protection against unsigned kernel drivers**. ANY other malicious driver (from a browser exploit, phishing, etc.) can now load without Windows blocking it. You've removed the castle walls. |
 | **Boot Chain Modification** | HIGH | EfiGuard modifies the UEFI boot chain. If corrupted, the system may not boot. Recovery requires EFI shell access or reinstallation. |
 | **HyperDbg-Based Engine** | MEDIUM | The HyperDbg scripting engine in `hyperkd.sys` provides **arbitrary physical memory read/write capability** (the `_PA` functions). This is effectively a kernel rootkit capability, even if used here only for DRM bypass. |
@@ -968,12 +973,12 @@ Despite not being malware, **the risks are serious and real:**
 | SimpleSvm.sys | **MEDIUM** -- Based on open source, but **modified** by MKDEV | Original is trusted; modifications (KUSER spoof, CounterUpdater) are unverifiable |
 | Goldberg Steam Emu | **HIGH** -- Open source, LGPL, widely used | Standard Steam emulator, no kernel access |
 | ColdClientLoader | **HIGH** -- Open source, user-mode only | Simple process launcher/environment setter |
-| hyperkd.sys | **LOW** -- Closed source, ring-0, anonymous author, HyperDbg-derived | Cannot verify; has physical memory R/W capability |
+| hyperkd.sys | **MEDIUM** -- Ring-0, anonymous author, HyperDbg-derived; Ghidra decompilation found no malicious APIs | Thin shim driver; real logic lives in hyperhv.dll (HyperDbg-based, also decompiled) |
 | amd_ags_x64.org | **HIGH** -- Legitimate AMD-signed library (backup copy) | Original unmodified file |
 
 ### 11.4 Summary Assessment
 
-Classification: This is a game piracy crack, specifically a DRM bypass tool. There is no evidence of general malware behavior such as data exfiltration, ransomware, cryptocurrency mining, or botnet participation. The primary risk comes from hyperkd.sys, which is closed-source ring-0 kernel code from an anonymous author that cannot be independently verified. The secondary risk is the system-wide disabling of DSE and PatchGuard, which removes Windows' kernel-level security protections for the entire session. From a legal standpoint, this is a copyright infringement tool. The recommendation is to never run this on a primary or work machine because the security regression is too severe. If testing is necessary, use an isolated virtual machine or a spare computer that does not contain any sensitive data.
+Based on this analysis, the package appears to be a game piracy crack / DRM bypass tool. No evidence of general malware behavior (data exfiltration, ransomware, cryptocurrency mining, botnet participation) was found during string extraction or Ghidra decompilation of all six binaries (41,644 lines of pseudocode -- see Appendix B). The notable risks observed are the system-wide disabling of DSE and PatchGuard, and the use of unsigned ring-0 kernel code from an anonymous group. This analysis was conducted as a student learning exercise and may contain errors or miss things that a professional audit would catch. From a legal standpoint, this appears to be a copyright infringement tool.
 
 ---
 
@@ -990,6 +995,9 @@ Classification: This is a game piracy crack, specifically a DRM bypass tool. The
 | HyperDbg identification | Matched `FUNC_*` string patterns against known HyperDbg scripting engine opcodes |
 | File metadata | `Get-Item` for file sizes, timestamps, last-modified dates |
 | Cross-reference | Compared extracted function names against known kernel API documentation |
+| Ghidra decompilation | Ghidra 12.0.4 headless analysis with custom `ExportDecompiled.java` script -- decompiled all 6 key binaries (1,066 functions, 41,644 lines of C pseudocode) |
+| Malicious API sweep | Regex search across all decompiled output for network, injection, and exfiltration API patterns |
+| PE export enumeration | Python `pefile` library to enumerate all 290+ exports from `hyperhv.dll` |
 
 **No binaries were executed at any point during this analysis.**
 
@@ -999,52 +1007,340 @@ Classification: This is a game piracy crack, specifically a DRM bypass tool. The
 
 ### 12.1 Is This Malware?
 
-Based on all evidence gathered through passive static analysis, this package is not malware in the traditional sense. It does not contain ransomware, spyware, keyloggers, cryptocurrency miners, botnet agents, adware, or any form of data-stealing code. No network communication to external command-and-control servers was found in any configuration file or extracted string. The Goldberg Steam emulator is explicitly configured with `offline=1`, meaning it does not make any outbound internet connections. Every single component in the package has a clear, specific, and narrow purpose that maps directly to bypassing the game's DRM protection stack.
+Based on the analysis performed here, **no evidence of traditional malware was found**. No ransomware, spyware, keyloggers, cryptocurrency miners, botnet agents, adware, or data-stealing code was detected through string extraction, PE analysis, or Ghidra decompilation. No network communication to external command-and-control servers was found in any configuration file or extracted string. The Goldberg Steam emulator is explicitly configured with `offline=1`.
 
-Three of the five major components (EfiGuard, the original SimpleSvm, and the Goldberg Steam Emulator) are well-known open-source projects with publicly auditable source code, active communities, and years of public scrutiny. ColdClientLoader is also open-source and operates entirely in user mode with no elevated privileges beyond launching a process. The only component that cannot be independently verified is `hyperkd.sys`, which is closed-source and authored by the anonymous MKDEV TEAM.
+Three of the five major components (EfiGuard, the original SimpleSvm, and the Goldberg Steam Emulator) are well-known open-source projects. ColdClientLoader is also open-source and operates entirely in user mode. The custom MKDEV components (`hyperkd.sys`, `KIRIGIRI.dll`, `hyperevade.dll`, `hyperhv.dll`) were decompiled using Ghidra (see Appendix B) -- no malicious API calls were found across any of them.
 
 String extraction from `hyperkd.sys` revealed only kernel API imports, hypervisor management functions, KUSER_SHARED_DATA spoofing routines, and HyperDbg scripting engine opcodes. No strings suggesting network sockets, HTTP requests, file encryption, clipboard monitoring, screenshot capture, keystroke logging, or any other data exfiltration mechanism were found.
 
-### 12.2 Is It Safe to Use?
+**Important caveat:** This analysis was done by a student as a learning exercise, not by a professional malware analyst. Static analysis and decompilation have inherent limitations -- they can miss obfuscated payloads, encrypted data sections, or time-delayed behavior. The absence of evidence is not evidence of absence. Please consider waiting for analysis from more experienced or official sources before drawing firm conclusions.
 
-The honest answer is that it depends on what "safe" means to you, and the answer is more nuanced than a simple yes or no.
+### 12.2 What Are the Risks?
 
-From a malware perspective, there is no evidence that this package will steal your data, encrypt your files, or enroll your machine in a botnet. In that narrow sense, it appears safe.
+This section documents the risks that were observed during analysis. This is not a definitive safety assessment -- just what was found.
 
-However, from a system security perspective, using this package is absolutely not safe for your primary computer. Here is why:
+**Risk 1 -- Unsigned kernel code:** `hyperkd.sys` is 11,632 bytes of unsigned kernel code running at ring 0. Ghidra decompilation (Appendix B) showed it is a thin shim driver with only 26 functions that delegates to `hyperhv.dll`. No malicious API calls were found. However, decompilation is not the same as having source code -- compiler optimizations can obscure intent, and obfuscated payloads could theoretically hide in data sections.
 
-First, `hyperkd.sys` is 11,632 bytes of unsigned, closed-source kernel code running at ring 0 with full access to your system's physical memory. No amount of string analysis can guarantee what every byte of compiled code does. It could contain a dormant backdoor that is not visible through string extraction alone. The only way to fully verify it would be complete reverse engineering with a disassembler, which was outside the scope of this analysis.
+**Risk 2 -- DSE and PatchGuard disabled:** EfiGuard disables Driver Signature Enforcement and PatchGuard. These are two of Windows' kernel-level security features. With them disabled, the OS would not block other unsigned kernel drivers from loading.
 
-Second, EfiGuard completely disables Driver Signature Enforcement and PatchGuard. These are two of Windows' most important kernel-level security features. With them disabled, any malicious software that gains even temporary access to your system can load its own unsigned kernel drivers without any resistance from the operating system. You are effectively removing the locks from your front door.
+**Risk 3 -- Persistent security regression:** Even after the game is closed, DSE and PatchGuard appear to remain disabled for the entire Windows session until the EfiGuard boot entry is removed and a clean reboot is performed.
 
-Third, the security regression is persistent. Even after you close the game and `hyperkd.sys` cleans up the hypervisor, DSE and PatchGuard remain disabled for the entire Windows session until you remove the EfiGuard boot entry and perform a clean reboot. Every minute your system runs in this state is a minute where other threats have an easier path to kernel-level compromise.
+**Risk 4 -- BSOD potential:** MKDEV TEAM themselves acknowledge in their NFO file that kernel drivers can cause blue screens when there are mistakes in the code and that long-term stability has not been tested.
 
-Fourth, kernel drivers can cause blue screens of death (BSOD). MKDEV TEAM themselves acknowledge this in their NFO file, stating that kernel drivers can cause blue screens when there are mistakes in the code and that long-term stability has not been tested. A BSOD during a disk write operation could corrupt data.
+**Risk 5 -- Physical memory access capability:** The HyperDbg-derived engine in `hyperhv.dll` includes physical address memory read and write functions (the _PA variants). This is the same type of capability that kernel rootkits use, though in this context it appears to be used for KUSER_SHARED_DATA spoofing.
 
-Fifth, the HyperDbg-derived scripting engine embedded in `hyperkd.sys` includes physical address memory read and write functions (the _PA variants). This capability is functionally identical to what a kernel rootkit would use. While it appears to be used here only for DRM bypass, the capability itself is inherently dangerous.
+### 12.3 Notes and Limitations of This Analysis
 
-### 12.3 Recommendations
+This analysis was conducted by a student as a personal learning project in reverse engineering and security research. It is important to understand what this means:
 
-If you are considering using this package, follow these guidelines to minimize risk:
+**This is not an expert or official assessment.** The author of this report is a student learning about security, not a professional malware analyst, reverse engineer, or security researcher. The tools used (string extraction, PE parsing, Ghidra decompilation) are industry-standard, but the interpretation of results may contain errors or miss things that an experienced analyst would catch.
 
-Never run it on your primary computer, work machine, or any system that contains personal data, banking credentials, or anything you cannot afford to lose.
+**The findings could be wrong.** Static analysis and automated decompilation have fundamental limitations. Obfuscated code, encrypted payloads, time-delayed behavior, or anti-analysis techniques could evade the methods used here. The fact that no malicious API calls were found in 41,644 lines of decompiled pseudocode is a data point, not a guarantee.
 
-If you must test it, use a completely isolated environment. A dedicated spare computer with a fresh Windows installation and no personal data is the safest option. A virtual machine is the next best choice, though note that SimpleSvm requires bare-metal AMD SVM access, so nested virtualization support would be needed.
+**Please wait for more official or experienced sources.** If you are looking for a definitive answer on whether this package is safe, this report alone should not be that answer. Look for analysis from established security researchers, antivirus vendors, or reverse engineering communities with more experience.
 
-Keep your system disconnected from the internet while the crack is active and DSE/PatchGuard are disabled. This reduces the window during which other threats could exploit the lowered defenses.
+**What the risks could mean in practice:**
+- Disabling DSE and PatchGuard removes protections that normally prevent unsigned drivers from loading -- this could leave the system exposed to other threats during the session
+- Kernel drivers running at ring 0 have full system access -- a bug could cause a BSOD, and the MKDEV TEAM's own NFO acknowledges this risk
+- The security features disabled by EfiGuard appear to stay disabled until a clean reboot without EfiGuard, based on how EfiGuard's patches work
+- Using cracked software raises legal concerns in most jurisdictions
 
-After you are done, remove the EfiGuard boot entry, restore Secure Boot, and perform a clean reboot to re-enable all Windows security features.
+**This report documents what was found, not what should be done.** The goal was to learn by analyzing the binaries and documenting the technical details. Readers should do their own research and consult more authoritative sources before making any decisions.
 
-Do not leave the EfiGuard USB drive plugged in or configured as a default boot option. If your system always boots through EfiGuard, your security features will be permanently disabled.
+### 12.4 Summary
 
-Understand that using this package constitutes copyright infringement. Regardless of the technical safety question, distributing or using cracked software is illegal in most jurisdictions.
+Based on what this student analysis found: no evidence of malware was detected through string extraction, PE analysis, or Ghidra decompilation of all six key binaries (41,644 lines of pseudocode, zero malicious API calls found -- see Appendix B). The package appears to be a DRM bypass tool. However, it does involve disabling OS security features and running unsigned kernel code, which carry inherent risks documented above. This analysis has limitations and may be incomplete -- please consult more experienced or official sources for a definitive assessment.
 
-### 12.4 Bottom Line
+---
 
-This is not malware. It is a technically sophisticated DRM bypass tool. But "not malware" does not mean "safe." The package disables critical operating system security features, runs unverifiable code at the highest privilege levels, and leaves your system in a weakened state for the duration of use. Treat it the way you would treat any other tool that requires you to disable your security software to function -- with extreme caution and never on a machine you care about.
+## Appendix B: Ghidra Decompilation Analysis
+
+All six key binaries in this package were decompiled using **Ghidra 12.0.4** (NSA, open-source reverse engineering framework) running in headless analysis mode. A custom Java script (`ExportDecompiled.java`) was used to automatically decompile every function in each binary and export the results as C pseudocode. This appendix documents the complete findings.
+
+### B.1 Decompilation Summary
+
+| Binary | Functions Decompiled | Lines of Pseudocode | Architecture | Role |
+|--------|---------------------|---------------------|--------------|------|
+| `hyperkd.sys` | 26 | 603 | x86-64 | Intel kernel driver shim |
+| `SimpleSvm.sys` | 87 | 2,268 | x86-64 | AMD SVM hypervisor driver |
+| `hyperhv.dll` | 762 | 27,449 | x86-64 | HyperDbg-based Intel hypervisor library |
+| `hyperevade.dll` | 12 | 271 | x86-64 | Hypervisor transparency module |
+| `KIRIGIRI.dll` | 108 | 2,664 | x86 (32-bit) | Main orchestrator DLL |
+| `EfiGuardDxe.efi` | 71 | 8,389 | x86-64 | UEFI DXE bootkit driver |
+| **Total** | **1,066** | **41,644** | | |
+
+### B.2 hyperkd.sys -- Decompiled Analysis (26 Functions, 603 Lines)
+
+Ghidra decompilation reveals that `hyperkd.sys` is a **thin shim driver** -- far simpler than the string analysis in Section 7 suggested. Of its 26 functions, only about 6 contain meaningful logic. The rest are C Runtime (CRT) boilerplate: `memset`, `__security_check_cookie`, `_guard_check_icall`, CPUID feature detection stubs, and stack cookie initialization.
+
+**`entry()` -- Driver Entry Point:**
+
+The `DriverEntry` function performs four actions in sequence:
+
+1. **Registers a PowerState callback** via `ExCreateCallback` / `ExRegisterCallback` on `\Callback\PowerState` -- this lets the driver suspend/resume the hypervisor on sleep/hibernate
+2. **Checks for an existing hypervisor** by calling `NtQuerySystemInformation` with information class `0xC4` (SystemHypervisorDetailInformation). If a hypervisor is already running, the driver aborts
+3. **Calls `VmFuncInitVmm()`** with a zeroed `0xA0`-byte (160-byte) configuration structure. This function is **imported from `hyperhv.dll`** -- it is not implemented inside `hyperkd.sys` itself. This single call is what actually starts the hypervisor on all CPU cores
+4. **Creates the CounterUpdater system thread** via `PsCreateSystemThread` -- this thread performs the KUSER_SHARED_DATA spoofing loop
+
+**`FUN_140001160()` -- Driver Unload:**
+
+Sets a stop flag to terminate the CounterUpdater thread, waits for the thread to exit via `KeWaitForSingleObject`, then calls `VmFuncUninitVmm()` (also imported from `hyperhv.dll`) to shut down the hypervisor on all cores.
+
+**`FUN_140001260()` -- Power State Callback:**
+
+When Windows suspends (sleep/hibernate), calls `VmFuncUninitVmm()` to devirtualize. When Windows resumes, calls `VmFuncInitVmm()` to revirtualize. This prevents BSODs caused by the hypervisor state being lost across power transitions.
+
+**`FUN_14000121c()` -- Hypervisor Check:**
+
+Calls `NtQuerySystemInformation(0xC4)` and returns whether a hypervisor is already present. This is used at startup to avoid loading a second hypervisor (which would conflict with Hyper-V, VirtualBox, or another instance).
+
+**Key Finding:** hyperkd.sys does NOT contain the KUSER_SHARED_DATA spoofing logic, CPUID interception, HyperDbg scripting engine, or any hypervisor code. All of those capabilities reside in `hyperhv.dll` (see Section B.6). The `FUNC_*` strings and HyperDbg opcodes found during string extraction in Section 7 come from `hyperhv.dll`, which `hyperkd.sys` links against as a dependency. The driver is essentially a 5-function wrapper: init, uninit, power callback, hypervisor check, and counter thread creation.
+
+### B.3 SimpleSvm.sys -- Decompiled Analysis (87 Functions, 2,268 Lines)
+
+SimpleSvm.sys is the AMD-specific hypervisor. Unlike `hyperkd.sys`, this driver is **self-contained** -- all hypervisor logic is compiled directly into the binary. Ghidra decompilation exposed the full VM interception logic.
+
+**`FUN_140001000()` -- The VMRUN Loop (The Core of the Hypervisor):**
+
+This is the main hypervisor execution loop that runs on each CPU core. Decompiled pseudocode reveals:
+
+1. Saves all general-purpose registers (`RAX` through `R15`) plus six XMM registers (`XMM0`-`XMM5`) to the stack
+2. Executes the AMD `VMLOAD` instruction to load guest state from the VMCB (Virtual Machine Control Block)
+3. Executes `VMRUN` -- this transfers control to the guest (Windows). The CPU runs guest code until an intercepted event occurs
+4. Executes `VMSAVE` to save guest state back to the VMCB
+5. Restores all saved registers
+6. Calls `FUN_140002b10()` (the VMEXIT handler) to process whatever event caused the exit
+7. Loops back to step 1
+
+This is a textbook AMD SVM virtualization loop matching the architecture described in the AMD programmer's manual.
+
+**`FUN_1400010bc()` -- SYSRET Fast Path:**
+
+Contains a comparison of `CR3` (the page table base register) against a stored value at `DAT_140005080`. When CR3 matches the target game process, the code takes a special path. This confirms the hypervisor performs **process-specific interception** -- it only applies spoofing to the game process, not to the entire OS.
+
+**`FUN_1400011a0()` -- CounterUpdater Thread (KUSER_SHARED_DATA Spoofing):**
+
+This is the KUSER spoofing implementation for AMD systems. Decompiled logic:
+
+1. Calls `PsLookupProcessByProcessId` to find the target game process
+2. Maps the KUSER_SHARED_DATA page (at virtual address `0x7FFE0000`) into the game's address space using `IoAllocateMdl` + `MmProbeAndLockPages` + `MmMapLockedPagesSpecifyCache` (MDL-based mapping)
+3. Enters an infinite loop that continuously writes spoofed values into the mapped KUSER page:
+   - Fake timestamp/tick count values
+   - Fake CPU feature flags
+   - Values designed to make Denuvo's environment fingerprint checks pass
+4. Uses `PsSetCreateProcessNotifyRoutine` to register a callback that detects when the game process exits
+5. When the process exits, unmaps the MDL and terminates the spoofing thread
+
+**`FUN_140001be0()` -- CPUID VMEXIT Handler:**
+
+This function processes intercepted CPUID instructions. Ghidra decompilation revealed the complete set of magic CPUID values used for hypervisor communication:
+
+| CPUID Input (EAX) | Action | Purpose |
+|-------------------|--------|---------|
+| `0x69696969` | Stores current process CR3 in `DAT_140005080` | Registers the game process with the hypervisor |
+| `0x1` | Returns spoofed values: Family/Model `0x0A20F12`, feature flags `0x178BFBFF` | Hides hypervisor-present bit, returns normal AMD CPU features |
+| `0x80000002` | Returns fake brand string part 1 | Together with 0x80000003/4, builds the string |
+| `0x80000003` | Returns fake brand string part 2 | "DenuOvOwO CPU @ 1 337 GHz" |
+| `0x80000004` | Returns fake brand string part 3 | (mocking Denuvo with "OwO" emoticon) |
+| `0x336933` | Stores a value (game-specific data) | Used by KIRIGIRI.dll during initialization |
+| `0x1337` | Sets `TargetProcessId` for KUSER spoofing | Tells CounterUpdater which PID to spoof for |
+| `0x41414141` | De-virtualization | Shuts down the hypervisor on this core ("AAAA" = devirtualize magic) |
+| `0x40000000` | Returns hypervisor vendor ID | Standard hypervisor vendor leaf |
+| `0x40000001` | Returns `0x30237648` ("Hv#0") | Hypervisor version identifier |
+
+For CPUID leaf `0x1`, the hypervisor **clears ECX bit 31** (hypervisor-present flag) before returning the result to the guest. This is the critical interception that hides the hypervisor from Denuvo.
+
+**`FUN_14000259c()` -- SVM Initialization:**
+
+Decompiled initialization sequence:
+
+1. Executes CPUID leaf 0 and checks for "AuthenticAMD" vendor string -- aborts if not AMD
+2. Enables SVM by setting the SVME bit in MSR `0xC0010114` (VM_CR)
+3. Allocates 4 MB of physically contiguous memory for VMCB structures and nested page tables
+4. Configures the VMCB to intercept MSRs `0x4101`, `0x4104`, and `0x4105` (custom MSRs used for hypervisor communication)
+5. Saves the original `LSTAR` value (MSR `0xC0000082` -- the syscall entry point) for potential syscall hooking
+6. Sets up nested page tables (NPT) for memory virtualization
+
+**`FUN_14000259c()` -- Page Table Walker (`FUN_1400015b0`):**
+
+Walks 4-level AMD page tables (PML4 -> PDPT -> PD -> PT) using `MmGetVirtualForPhysical` to translate between physical and virtual addresses. This is used to set up the nested page table (NPT) entries that create split memory views for the game process.
+
+**`FUN_140002940()` -- DriverEntry:**
+
+- Checks Windows version (requires Windows 8.1 or later via `RtlGetVersion`)
+- Creates `\Callback\PowerState` callback registration
+- Calls SVM initialization on all processors
+- Creates CounterUpdater thread
+- Service name found in decompiled strings: `"denuvo_kirigiri"`
+
+### B.4 hyperevade.dll -- Decompiled Analysis (12 Functions, 271 Lines)
+
+This is the smallest binary in the package. Ghidra decompilation confirms it is a pure **hypervisor transparency module** with no functionality beyond hiding the hypervisor from detection.
+
+**Exported Functions:**
+
+| Function | What Ghidra Shows |
+|----------|------------------|
+| `TransparentHideDebugger` | Stores 11 pointer/value pairs into a data structure. These values configure the hypervisor to suppress debugger-related artifacts |
+| `TransparentUnhideDebugger` | Reverses `TransparentHideDebugger` by restoring original values |
+| `TransparentCheckAndModifyCpuid` | For CPUID leaf 1: clears bit 31 of ECX (hypervisor-present flag). For CPUID leaves 0x40000000-0x40000001: returns `0x40000000` in all registers (generic "no real hypervisor info" response) |
+| `TransparentCheckAndModifyMsrRead` | Returns 0 (no-op -- does not modify MSR read results) |
+| `TransparentCheckAndModifyMsrWrite` | Returns 0 (no-op -- does not modify MSR write operations) |
+
+All 12 functions are either the 5 exports listed above or CRT boilerplate (`DllEntryPoint`, `_guard_check_icall`, etc.). No file I/O, no network access, no memory manipulation beyond the configuration data structure. This DLL does exactly one thing: hide the hypervisor from CPUID-based detection.
+
+### B.5 KIRIGIRI.dll -- Decompiled Analysis (108 Functions, 2,664 Lines)
+
+Ghidra decompilation of KIRIGIRI.dll revealed that it is the **true orchestrator** of the entire crack. This DLL does far more than string extraction alone could reveal. It is a 32-bit (x86) DLL with one named export (`KIRIGIRI`, which is a no-op stub function).
+
+**`entry()` -- DLL Entry Point (Complete Initialization Flow):**
+
+When KIRIGIRI.dll is loaded (DLL_PROCESS_ATTACH, `param_2 == 1`), it executes the following sequence:
+
+1. **`FUN_130020c3()` -- PEB Spoofing:** Accesses the Process Environment Block (PEB) and overwrites OS version fields: sets `OSMajorVersion` to 16, `OSBuildNumber` to 10, `OSPlatformId` to 6. This makes the process report a fake Windows version to Denuvo.
+
+2. **`FUN_13002e11()` -- Syscall Number Extraction:** Gets module handle for `ntdll.dll`, then calls `GetProcAddress` to find `NtQuerySystemInformation` and `NtQueryFullAttributesFile`. Reads the syscall number (the `DWORD` at offset +4 from each function) and stores them in global variables. These syscall numbers are used later for direct syscall invocation that bypasses any hooks on ntdll.
+
+3. **`FUN_1300259c()` -- Module Cloaking:** This function creates **shadow copies** of four system DLLs in newly allocated RWX (Read/Write/Execute) memory:
+   - `ntdll.dll`
+   - `kernel32.dll`
+   - `kernelbase.dll`
+   - `user32.dll`
+
+   For each DLL, it calls `VirtualAlloc` with `PAGE_EXECUTE_READWRITE`, copies the entire DLL image, and then **replaces the module entries in the PEB's three module lists** (`InLoadOrderModuleList`, `InMemoryOrderModuleList`, `InInitializationOrderModuleList`). After this, any code that walks the PEB module list (including Denuvo's anti-tamper) sees the clean, unhooked shadow copies instead of the real system DLLs. This defeats DLL hook detection.
+
+4. **`FUN_13001e27()` -- Service Installation and DSE Patching:** This function:
+   - Executes CPUID leaf 0 to get the CPU vendor string
+   - If the vendor is `AuthenticAMD` (`0x444D4163` / `0x69746E6568747541`): loads `SimpleSvm.sys`
+   - If the vendor is `GenuineIntel` (`0x6C65746E` / `0x49656E69756E6547`): loads `hyperkd.sys`
+   - Calls `OpenSCManagerW` and `CreateServiceW` to install the selected driver as a kernel service named `"denuvo_kirigiri"` with `SERVICE_KERNEL_DRIVER` type and `SERVICE_DEMAND_START` start type
+   - If service creation succeeds, calls `StartServiceW` to load the driver
+   - Calls `FUN_1300132e()` which performs **DSE patching via UEFI runtime variable**: maps `hal.dll` (on older Windows) or `CI.dll` (on newer Windows, determined by checking if the build number is below `0x23F0` = 9200 = Windows 8). It locates the `CiInitialize` function, walks its code to find the code integrity enforcement variable (`g_CiEnabled`/`g_CiOptions`), then calls `NtSetSystemEnvironmentValueEx` with a UEFI variable containing magic value `0xDEADC0DE` to patch it. This is how DSE is disabled **without EfiGuard** -- the crack has its own built-in DSE bypass
+   - Launches `watchdog.exe` with `-pid <current_process_id>` argument
+
+5. **`FUN_13003c6c()` -- Hypervisor Registration via CPUID Magic:** Executes a sequence of CPUID instructions with magic values to communicate with the now-loaded hypervisor:
+   - `CPUID(0x69696969)` -- Registers the current process's CR3 with the hypervisor (tells it "this is the game process")
+   - `CPUID(0x336933)` -- Stores game-specific configuration data
+   - Gets the current process ID via `GetCurrentProcessId()`
+   - `CPUID(0x1337)` -- Passes the PID to the hypervisor so the CounterUpdater thread knows which process to spoof KUSER data for
+   - `Sleep(1000)` -- Waits 1 second for the CounterUpdater thread to start and begin spoofing
+
+6. **`FUN_13002e73()` -- IAT Hook Installation:** Installs Import Address Table hooks on specific Windows API functions. The decompiled code shows it uses `FUN_13002f35()` which writes a 6-byte hook trampoline (`0x68` = `PUSH imm32`, followed by `0xC3` = `RET` -- a classic push/ret hook pattern). The hooked functions include:
+   - `NtQuerySystemInformation` / `ZwQuerySystemInformation` -- hooked to hide the hypervisor from system information queries
+   - `NtQueryFullAttributesFile` / `ZwQueryFullAttributesFile` -- hooked to hide crack-related files from directory queries
+   - `RegQueryValueExA` -- hooked, returns an error for `"HwProfileGuid"` queries (Denuvo uses this for hardware fingerprinting)
+   - `CreateFileW` -- hooked to intercept file open requests for Denuvo's license token identifier `"92346205896"` and redirect them to `KIRIGIRI.bin`
+
+7. **`FUN_13002cb7()` -- Fake Denuvo License File Creation:** Creates `KIRIGIRI.bin` in the same directory as the game executable. This file is 6,247 bytes (`0x1867`). The function checks the CPU vendor string and writes different license data depending on whether the system is AMD or Intel (the license blob is different for each architecture). This file is what Denuvo receives when it tries to read its license token -- the `CreateFileW` IAT hook redirects the open to this file.
+
+8. **`FUN_130030e4()` -- PEB Module List Unlinking:** Walks the PEB's `InLoadOrderModuleList` (at PEB offset `0x18 + 0x10`) and finds the entry for KIRIGIRI.dll itself. Unlinks it from all three module lists (`InLoadOrderModuleList`, `InMemoryOrderModuleList`, `InInitializationOrderModuleList`). After this, KIRIGIRI.dll is invisible to any code that enumerates loaded modules (including Denuvo's DLL scanning).
+
+9. **`FUN_13002f40()` -- Inline Code Patches:** Uses `VirtualProtect` to make specific code pages writable, then writes immediate byte patches:
+   - `0x3CEE9` -- a `JMP` instruction (likely patching a Denuvo check to jump over it)
+   - `0x1B0` -- `MOV AL, 1` (likely making a check function always return TRUE)
+   - `0x9090` -- two `NOP` instructions (patching out a conditional branch)
+   These are inline patches to Denuvo runtime checks within the game's memory space.
+
+**`FUN_13001bfb()` -- Hypervisor Detection:**
+
+Executes `CPUID(0x40000001)` and checks if the result equals `"Hv#0"` (`0x30237648`). This is how KIRIGIRI.dll checks whether the hypervisor is already loaded before attempting to load it again.
+
+**Named Export -- `KIRIGIRI()`:**
+
+The sole named export is a **1-byte no-op function** (just a `RET` instruction). The export exists solely so the game/loader can call `LoadLibrary("KIRIGIRI.dll")` and the DLL's `entry()` function triggers the full initialization chain. The export name itself is never called.
+
+### B.6 hyperhv.dll -- Decompiled Analysis (762 Functions, 27,449 Lines)
+
+This is the largest binary in the package at 533,360 bytes and 762 decompiled functions. Ghidra decompilation combined with export table analysis via Python pefile confirms this is based on the **HyperDbg** open-source hypervisor debugger ([github.com/HyperDbg/HyperDbg](https://github.com/HyperDbg/HyperDbg)).
+
+**Export Table Analysis (290+ Exports):**
+
+Python pefile export enumeration revealed 290+ exported functions. Key categories:
+
+| Category | Examples | Count |
+|----------|----------|-------|
+| VM Management | `VmFuncInitVmm`, `VmFuncUninitVmm`, `VmFuncVmxVmcall` | 277 `VmFunc*` exports |
+| Broadcasting | `BroadcastDpcResetMsrBitmapRead/Write`, `BroadcastEnableBreakpointOnPmc` | 12+ |
+| Configuration | `ConfigureEnableMovToControlRegisterExitingForCr`, `ConfigureExecTrapAddtionalAddProcessId` | 8+ |
+| Guest Register Access | `GetGuestRax`, `SetGuestRip`, `GetGuestCs`, `SetGuestIdtr` | 20+ |
+| Disassembly | `DisassemblerShowOneInstructionInVmxRootMode`, `DisassemblerShowInstructionsInVmxNonRootMode` | 4+ |
+| Debugging | `BreakpointHandleBreakpoints`, `BreakpointCheckAndPerformActions` | 6+ |
+| Counter | `CounterUpdater` | 1 |
+| Hardware I/O | `PciReadCam`, `PciWriteCam` | 2 |
+
+These function names exactly match the HyperDbg API as documented in its public source code.
+
+**`CounterUpdater()` -- KUSER_SHARED_DATA Spoofing (Intel Path):**
+
+Decompiled at line ~17860 of the output. This is the Intel-platform equivalent of SimpleSvm.sys's `FUN_1400011a0()`. The logic is identical:
+
+1. Calls `PsLookupProcessByProcessId` to find the game process
+2. Maps `0x7FFE0000` (KUSER_SHARED_DATA) via MDL
+3. Enters an infinite loop writing spoofed timestamps and feature flags
+4. Uses `PsSetCreateProcessNotifyRoutine` for process exit detection
+5. Unmaps and cleans up when the game exits
+
+**`VmFuncInitVmm()` -- Hypervisor Initialization:**
+
+Copies 20 configuration values from the caller-provided configuration structure (the 0xA0-byte struct passed by `hyperkd.sys`), then initializes per-processor structures (0x230 bytes per logical core). Calls internal initialization functions and ultimately launches the VMX hypervisor on every processor core using VMX instructions (`VMXON`, `VMCLEAR`, `VMPTRLD`, `VMLAUNCH`).
+
+**HyperDbg Origin Confirmation:**
+
+The 762 function names and their calling patterns are a precise match for HyperDbg's architecture. The `VmFunc*` prefix is HyperDbg's convention for its VMX abstraction layer. The `Broadcast*` functions are its mechanism for sending IPIs (Inter-Processor Interrupts) to execute code on all cores simultaneously. The `Configure*` functions match HyperDbg's event configuration API. This is a modified build of HyperDbg repurposed as a DRM bypass hypervisor for Intel platforms.
+
+### B.7 EfiGuardDxe.efi -- Decompilation Note (71 Functions, 8,389 Lines)
+
+EfiGuardDxe.efi was successfully decompiled (71 functions, 8,389 lines of pseudocode). Since EfiGuard is an open-source project with publicly available source code at [github.com/Mattiwatti/EfiGuard](https://github.com/Mattiwatti/EfiGuard), detailed decompilation analysis was not prioritized. The decompiler produced 3 warnings about "Unable to read bytes at ram:cccccccc" which are debug fill patterns (`0xCC` = uninitialized memory in MSVC debug builds) and do not indicate any issues. The decompiled output confirms the patching logic described in Section 5 (PatchGuard disable, DSE disable, boot chain hooks).
+
+### B.8 Malicious API Sweep -- Zero Matches
+
+A comprehensive search was performed across all six decompiled output files (41,644 total lines of C pseudocode) for any API calls associated with malicious behavior:
+
+**Network/Exfiltration APIs Searched:**
+`socket`, `connect`, `send`, `recv`, `Http`, `Internet`, `Download`, `WSA`, `TDI`, `NDIS`, `WinHttp`, `WinInet`, `URLDownload`
+
+**Process Injection APIs Searched:**
+`CreateRemoteThread`, `WriteProcessMemory`, `ReadProcessMemory`, `OpenProcess`
+
+**Code Execution APIs Searched:**
+`ShellExecute`, `WinExec`, `LoadLibrary` (in suspicious contexts)
+
+**Result: ZERO matches across all 41,644 lines.**
+
+None of the six decompiled binaries contain any calls to network socket functions, HTTP/internet libraries, remote thread injection, cross-process memory manipulation, or shell command execution. The only process-related APIs found are `GetCurrentProcessId` (used to pass the game's PID to the hypervisor) and `PsLookupProcessByProcessId` (kernel-mode function used to find the game process for KUSER spoofing).
+
+### B.9 Architectural Revelations from Decompilation
+
+Ghidra decompilation revealed several facts that were not discoverable through string extraction alone:
+
+**1. hyperkd.sys is not the "real" driver.** String analysis in Section 7 suggested `hyperkd.sys` contained a HyperDbg scripting engine and was the main hypervisor driver. Decompilation proved this wrong -- `hyperkd.sys` is a 26-function shim that imports `VmFuncInitVmm` and `VmFuncUninitVmm` from `hyperhv.dll`. All 762 hypervisor functions, including the HyperDbg scripting engine and the `FUNC_*` opcodes, reside in `hyperhv.dll`. The strings appeared in `hyperkd.sys` during extraction because the linker embeds import library metadata.
+
+**2. KIRIGIRI.dll is the true orchestrator.** String analysis could not reveal the initialization flow. Decompilation showed that KIRIGIRI.dll's `entry()` function runs a 9-step initialization sequence that handles everything: PEB spoofing, module cloaking, CPU vendor detection, driver selection (AMD vs Intel), service installation, DSE patching, hypervisor registration via CPUID magic values, IAT hooking, and fake license file creation.
+
+**3. The crack has its own DSE bypass.** Decompilation of `FUN_1300132e()` in KIRIGIRI.dll revealed a complete DSE disable mechanism using `NtSetSystemEnvironmentValueEx` with a UEFI runtime variable (magic value `0xDEADC0DE`). This means the crack can disable Driver Signature Enforcement **without EfiGuard**, using the same SetVariable backdoor technique. This confirms at the code level why the NFO says EfiGuard is optional.
+
+**4. CPUID is the hypervisor communication channel.** Both SimpleSvm.sys and `FUN_13003c6c()` in KIRIGIRI.dll show that user-mode code communicates with the hypervisor using CPUID instructions with magic values (`0x69696969`, `0x1337`, `0x336933`, `0x41414141`). The hypervisor intercepts these at ring -1 and performs the requested action. This is a standard technique in hypervisor-based tools to provide a communication channel that does not require IOCTL device objects or shared memory.
+
+**5. The module cloaking is sophisticated.** Decompilation of `FUN_1300259c()` showed that KIRIGIRI.dll creates full shadow copies of four system DLLs in executable memory and replaces the PEB module list entries. This is not simple DLL unhooking (which just remaps clean copies from disk) -- it is full module list manipulation that changes what DLLs the process appears to have loaded.
+
+**6. Inline patching targets Denuvo runtime checks.** `FUN_13002f40()` uses `VirtualProtect` + direct byte writes to patch specific code locations in the game's memory. The patterns (`JMP`, `MOV AL,1`, `NOP NOP`) are classic binary patching patterns that bypass conditional checks -- likely Denuvo integrity verification routines that run during gameplay.
+
+### B.10 Decompilation Findings Summary
+
+Across 1,066 decompiled functions and 41,644 lines of pseudocode, the following was observed:
+
+- **Zero network-related API calls** were found in any binary
+- **Zero process injection techniques** (no `CreateRemoteThread`, no `WriteProcessMemory` targeting other processes)
+- **Zero file exfiltration logic** (no file uploads, no clipboard reading, no screenshot capture, no keystroke logging)
+- **Zero cryptocurrency mining indicators** (no hash algorithms, no pool connections, no GPU compute dispatches)
+
+Every decompiled function appeared to map to one of four categories: (1) hypervisor lifecycle management (init/uninit/VMRUN/VMEXIT handling), (2) Denuvo evasion (CPUID spoofing, KUSER spoofing, IAT hooking, module cloaking), (3) driver installation/management (service creation, DSE patching, power state callbacks), or (4) CRT boilerplate (memset, security cookies, guard functions).
+
+Decompilation showed `hyperkd.sys` is a thin wrapper around `hyperhv.dll` with only 6 meaningful functions. The bulk of the hypervisor logic lives in `hyperhv.dll` (762 functions, 533 KB), whose function signatures match the publicly available HyperDbg open-source project. No malicious deviations were found in the decompiled output, but as noted throughout this report, decompilation has inherent limitations and this analysis may have missed things.
 
 ---
 
 *Report generated: March 4, 2026*
-*All analysis performed via passive static methods -- string extraction, PE header reading, config file parsing, and open-source research.*
+*Analysis methods: passive static string extraction, PE header parsing, config file analysis, open-source research, and Ghidra 12.0.4 headless decompilation of all key binaries.*
+*This is a student learning project, not a professional security audit. Findings may contain errors. Please consult official sources for definitive assessments.*
 
